@@ -1,29 +1,27 @@
 pipeline {
     agent any
 
-    // Definisikan Variabel Unik per Service di sini
     environment {
-        // Ganti sesuai nama service
-        SERVICE_NAME = 'bukuservice' 
-        // Ganti sesuai path Dockerfile relatif dari root repo git
-        DOCKER_DIR = 'PerpustakaanService/bukuservice' 
-        // Nama Deployment di Kubernetes
-        K8S_DEPLOYMENT = 'buku-deployment'
-        // Namespace Kubernetes
+        // --- KONFIGURASI KHUSUS ANGGOTA SERVICE ---
+        SERVICE_NAME = 'anggotaservice'
+        DOCKER_DIR = 'PerpustakaanService/anggotaservice' 
+        K8S_DEPLOYMENT = 'anggota-deployment'
         K8S_NS = 'perpustakaan-ns'
-        // Registry Image
+        // Nama container di dalam file YAML deployment (biasanya anggota-container)
+        CONTAINER_NAME = 'anggota-container'
+        
+        // Gunakan Tag Statis 1.0 agar hemat penyimpanan
         IMAGE_TAG = "localhost:5000/${SERVICE_NAME}:1.0"
     }
 
     tools {
-        // Panggil Maven yang tadi kita setting di Global Tools
         maven 'maven-3'
     }
 
     stages {
         stage('Initialize') {
             steps {
-                // Install Docker CLI & Kubectl di dalam Pod Jenkins (jika belum ada)
+                // Setup Docker & Kubectl client di Jenkins
                 sh '''
                 if ! command -v docker &> /dev/null; then
                     curl -fsSL https://get.docker.com -o get-docker.sh
@@ -41,7 +39,7 @@ pipeline {
         stage('Build Maven') {
             steps {
                 dir("${DOCKER_DIR}") {
-                    // Build file .jar
+                    // Skip test agar cepat (2-3 menit)
                     sh 'mvn clean package -DskipTests'
                 }
             }
@@ -50,7 +48,6 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 dir("${DOCKER_DIR}") {
-                    // Build image menggunakan Docker Socket host
                     sh "docker build -t ${IMAGE_TAG} ."
                 }
             }
@@ -58,17 +55,16 @@ pipeline {
 
         stage('Push Image') {
             steps {
-                // Push ke Local Registry
                 sh "docker push ${IMAGE_TAG}"
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                // Update image di deployment yang sudah ada
+                // Update image di deployment
                 sh """
-                kubectl set image deployment/buku-deployment \
-                buku-container=${IMAGE_TAG} \
+                kubectl set image deployment/${K8S_DEPLOYMENT} \
+                ${CONTAINER_NAME}=${IMAGE_TAG} \
                 -n ${K8S_NS}
                 """
                 
